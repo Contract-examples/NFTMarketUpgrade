@@ -41,8 +41,7 @@ contract NFTMarketTest is Test, IERC20Errors {
     address proxy;
 
     function setUp() public {
-        factory =
-            IUUPSProxyFactory(deployCode("../lib/UUPSProxyFactorySDK/abi/UUPSProxyFactory.sol:UUPSProxyFactory"));
+        factory = IUUPSProxyFactory(deployCode("../lib/UUPSProxyFactorySDK/abi/UUPSProxyFactory.sol:UUPSProxyFactory"));
 
         owner = address(this);
         paymentToken = new MyERC20PermitToken("MyNFTToken2612", "MTK2612", 1_000_000 * 10 ** 18);
