@@ -7,10 +7,15 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
+
+import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
+import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
+
 import "@solady/utils/SafeTransferLib.sol";
 import "./IERC20Receiver.sol";
 
-contract NFTMarket is IERC20Receiver, Ownable {
+contract NFTMarket is IERC20Receiver, Initializable, UUPSUpgradeable, OwnableUpgradeable {
     using ECDSA for bytes32;
     using MessageHashUtils for bytes32;
 
@@ -45,20 +50,32 @@ contract NFTMarket is IERC20Receiver, Ownable {
     }
 
     // this is our payment token
-    IERC20 public immutable paymentToken;
+    IERC20 public paymentToken;
     // this is our payment token permit
-    IERC20Permit public immutable paymentTokenPermit;
+    IERC20Permit public paymentTokenPermit;
     // indicate if the payment token supports permit(EIP-2612)
-    bool public immutable supportsPermit;
+    bool public supportsPermit;
     // this is our NFT contract
-    IERC721 public immutable nftContract;
+    IERC721 public nftContract;
     // this is our whitelist signer
     address public whitelistSigner;
 
     // this is our listing mapping [tokenId => Listing]
     mapping(uint256 => Listing) public listings;
 
-    constructor(address _nftContract, address _paymentToken) Ownable(msg.sender) {
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
+    // authorize upgrade(only owner)
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner { }
+
+    // initialize function
+    function initialize(address _nftContract, address _paymentToken, address initialOwner) public initializer {
+        __Ownable_init(initialOwner);
+        __UUPSUpgradeable_init();
+
         nftContract = IERC721(_nftContract);
         paymentToken = IERC20(_paymentToken);
 
