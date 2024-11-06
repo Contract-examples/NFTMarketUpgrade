@@ -13,6 +13,7 @@
         "@openzeppelin-upgradeable/=lib/openzeppelin-contracts-upgradeable/",
         "@solmate/=lib/solmate/src/",
         "@solady/=lib/solady/src/",
+        "@uups-proxy-factory-sdk/=lib/UUPSProxyFactorySDK/",
         "@forge/=lib/forge-std/src/"
     ]
 }
