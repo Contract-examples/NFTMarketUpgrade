@@ -35,6 +35,8 @@ contract NFTMarketV2 is IERC20Receiver, Initializable, UUPSUpgradeable, OwnableU
     error NotSignedByWhitelistSigner();
     error PermitNotSupported();
     error InvalidWhitelistSigner();
+    error SignatureExpired();
+    error InvalidSignature();
 
     // custom events
     event NFTListed(uint256 indexed tokenId, address indexed seller, uint256 price);
@@ -42,6 +44,7 @@ contract NFTMarketV2 is IERC20Receiver, Initializable, UUPSUpgradeable, OwnableU
     event NFTUnlisted(uint256 indexed tokenId);
     event Refund(address indexed from, uint256 amount);
     event WhitelistBuy(uint256 indexed tokenId, address indexed buyer, uint256 price);
+    event NFTListedWithSignature(uint256 indexed tokenId, address indexed seller, uint256 price, uint256 deadline);
 
     // custom structs
     struct Listing {
@@ -295,5 +298,58 @@ contract NFTMarketV2 is IERC20Receiver, Initializable, UUPSUpgradeable, OwnableU
 
         // emit the WhitelistBuy event
         emit WhitelistBuy(tokenId, msg.sender, price);
+    }
+
+    function listWithSignature(uint256 tokenId, uint256 price, uint256 deadline, bytes memory signature) external {
+        // check if the signature is expired
+        if (block.timestamp > deadline) {
+            revert SignatureExpired();
+        }
+
+        // make sure the price is greater than zero
+        if (price == 0) {
+            revert PriceMustBeGreaterThanZero();
+        }
+
+        // verify the signature is signed by the NFT owner
+        address seller = nftContract.ownerOf(tokenId);
+
+        // build the message hash
+        bytes32 messageHash = keccak256(
+            abi.encodePacked(
+                "\x19Ethereum Signed Message:\n32",
+                keccak256(
+                    abi.encodePacked(
+                        address(this), // contract address
+                        tokenId, // NFT tokenId
+                        price, // price
+                        deadline // deadline
+                    )
+                )
+            )
+        );
+
+        // recover the signer address
+        address signer = messageHash.recover(signature);
+
+        // the signer is not the NFT owner
+        if (signer != seller) {
+            revert InvalidSignature();
+        }
+
+        // the NFT is not approved for the NFTMarket contract
+        if (!nftContract.isApprovedForAll(seller, address(this))) {
+            revert NFTNotApproved();
+        }
+
+        // add to listings
+        listings[tokenId] = Listing(seller, price);
+
+        // emit the NFTListedWithSignature event
+        emit NFTListedWithSignature(tokenId, seller, price, deadline);
+    }
+
+    function getListingMessageHash(uint256 tokenId, uint256 price, uint256 deadline) public view returns (bytes32) {
+        return keccak256(abi.encodePacked(address(this), tokenId, price, deadline));
     }
 }
