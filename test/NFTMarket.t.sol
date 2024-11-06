@@ -56,6 +56,8 @@ contract NFTMarketTest is Test, IERC20Errors {
         proxy = factory.deployProxy(address(market), initData, salt);
         console2.log("Deployed proxy address:", proxy);
 
+        market = NFTMarket(payable(proxy));
+
         // use a fixed private key to generate the address
         whitelistSignerPrivateKey = 0x3389;
         whitelistSigner = vm.addr(whitelistSignerPrivateKey);
@@ -110,7 +112,34 @@ contract NFTMarketTest is Test, IERC20Errors {
         }
     }
 
-    function testInitialSetup() public {
-        console2.log("Proxy address:", proxy);
+    function testListNFT(uint8 sellerIndex, uint256 price) public {
+        // limit sellerIndex
+        sellerIndex = uint8(bound(uint256(sellerIndex), 0, 2));
+
+        // set a reasonable price range
+        uint256 minPrice = 1; // minimum price is 1 wei
+        uint256 maxPrice = 1000 * 10 ** paymentToken.decimals(); // maximum price remains the same
+        price = bound(price, minPrice, maxPrice);
+
+        address[] memory sellers = new address[](3);
+        sellers[0] = seller;
+        sellers[1] = seller2;
+        sellers[2] = seller3;
+
+        address currentSeller = sellers[sellerIndex];
+        uint256 tokenId = sellerIndex;
+
+        vm.startPrank(currentSeller);
+
+        nftContract.approve(address(market), tokenId);
+        market.list(tokenId, price);
+
+        vm.stopPrank();
+
+        (address listedSeller, uint256 listedPrice) = market.listings(tokenId);
+        console2.log("Seller: listedSeller:", vm.getLabel(listedSeller));
+        console2.log("Seller: listedPrice:", listedPrice);
+        assertEq(listedSeller, currentSeller);
+        assertEq(listedPrice, price);
     }
 }
