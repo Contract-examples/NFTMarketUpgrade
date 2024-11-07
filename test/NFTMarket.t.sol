@@ -189,8 +189,8 @@ contract NFTMarketTest is Test, IERC20Errors {
         }
     }
 
-    function testListWithSignatureV2() public {
-        // upgrade to v2
+    function testBuyWithSignature() public {
+        // 1. upgrade to V2
         vm.startPrank(owner);
         NFTMarketV2 marketV2 = new NFTMarketV2();
         NFTMarketV2(proxy).upgradeToAndCall(
@@ -201,28 +201,38 @@ contract NFTMarketTest is Test, IERC20Errors {
 
         marketV2 = NFTMarketV2(proxy);
 
+        // 2. set test parameters
         uint256 tokenId = 0;
         uint256 price = 100 * 10 ** paymentToken.decimals();
         uint256 deadline = block.timestamp + 1 hours;
 
-        // set approval for all
+        // 3. seller approve NFTMarket contract
         vm.prank(seller);
         nftContract.setApprovalForAll(address(marketV2), true);
 
-        // generate signature
+        // 4. generate seller signature
         bytes32 messageHash = marketV2.getListingMessageHash(tokenId, price, deadline);
         bytes32 ethSignedMessageHash = messageHash.toEthSignedMessageHash();
 
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(sellerPrivateKey, ethSignedMessageHash);
         bytes memory signature = abi.encodePacked(r, s, v);
 
-        // call listWithSignature
-        vm.prank(seller);
-        marketV2.listWithSignature(tokenId, price, deadline, signature);
+        // 5. buyer approve payment token
+        vm.startPrank(buyer);
+        paymentToken.approve(address(marketV2), price);
 
-        // verify listing result
-        (address listedSeller, uint256 listedPrice) = marketV2.listings(tokenId);
-        assertEq(listedSeller, seller);
-        assertEq(listedPrice, price);
+        // 6. buyer buy NFT
+        marketV2.buyWithSignature(tokenId, price, deadline, signature);
+        vm.stopPrank();
+
+        // 7. verify the purchase result
+        assertEq(nftContract.ownerOf(tokenId), buyer);
+        assertEq(paymentToken.balanceOf(seller), price);
+
+        // 8. test expired signature
+        vm.warp(deadline + 1);
+        vm.expectRevert(NFTMarketV2.SignatureExpired.selector);
+        vm.prank(buyer);
+        marketV2.buyWithSignature(tokenId, price, deadline, signature);
     }
 }

@@ -45,6 +45,9 @@ contract NFTMarketV2 is IERC20Receiver, Initializable, UUPSUpgradeable, OwnableU
     event Refund(address indexed from, uint256 amount);
     event WhitelistBuy(uint256 indexed tokenId, address indexed buyer, uint256 price);
     event NFTListedWithSignature(uint256 indexed tokenId, address indexed seller, uint256 price, uint256 deadline);
+    event NFTBoughtWithSignature(
+        uint256 indexed tokenId, address indexed seller, address indexed buyer, uint256 price, uint256 deadline
+    );
 
     // custom structs
     struct Listing {
@@ -300,7 +303,7 @@ contract NFTMarketV2 is IERC20Receiver, Initializable, UUPSUpgradeable, OwnableU
         emit WhitelistBuy(tokenId, msg.sender, price);
     }
 
-    function listWithSignature(uint256 tokenId, uint256 price, uint256 deadline, bytes memory signature) external {
+    function buyWithSignature(uint256 tokenId, uint256 price, uint256 deadline, bytes memory signature) external {
         // check if the signature is expired
         if (block.timestamp > deadline) {
             revert SignatureExpired();
@@ -311,8 +314,13 @@ contract NFTMarketV2 is IERC20Receiver, Initializable, UUPSUpgradeable, OwnableU
             revert PriceMustBeGreaterThanZero();
         }
 
-        // verify the signature is signed by the NFT owner
+        // get the NFT owner
         address seller = nftContract.ownerOf(tokenId);
+
+        // make sure the buyer is not the seller
+        if (msg.sender == seller) {
+            revert TheSenderIsTheSeller();
+        }
 
         // build the message hash
         bytes32 messageHash = keccak256(
@@ -337,16 +345,19 @@ contract NFTMarketV2 is IERC20Receiver, Initializable, UUPSUpgradeable, OwnableU
             revert InvalidSignature();
         }
 
-        // the NFT is not approved for the NFTMarket contract
+        // check if the NFT is approved for the NFTMarket contract
         if (!nftContract.isApprovedForAll(seller, address(this))) {
             revert NFTNotApproved();
         }
 
-        // add to listings
-        listings[tokenId] = Listing(seller, price);
+        // transfer the payment token to the seller
+        SafeTransferLib.safeTransferFrom(address(paymentToken), msg.sender, seller, price);
 
-        // emit the NFTListedWithSignature event
-        emit NFTListedWithSignature(tokenId, seller, price, deadline);
+        // transfer NFT from seller to buyer
+        nftContract.safeTransferFrom(seller, msg.sender, tokenId);
+
+        // emit the NFTBoughtWithSignature event
+        emit NFTBoughtWithSignature(tokenId, seller, msg.sender, price, deadline);
     }
 
     function getListingMessageHash(uint256 tokenId, uint256 price, uint256 deadline) public view returns (bytes32) {
